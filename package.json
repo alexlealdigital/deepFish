@@ -1,3 +1,7 @@
+app.post('/incrementar-jogadas', async (req, res) => {
+  console.log("Requisição recebida:", req.body); // ← Novo log
+  // ... resto do código
+});
 {
   "name": "deepfish-api",
   "version": "1.0.0",
