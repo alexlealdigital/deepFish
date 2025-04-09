@@ -1,12 +1,14 @@
 const express = require('express');
 const { Pool } = require('pg');
+require('dotenv').config(); // Carrega variáveis do .env (apenas para desenvolvimento)
+
 const app = express();
 app.use(express.json());
 
-// Conexão com o PostgreSQL (Render)
+// Configuração do PostgreSQL (Render ou local)
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false } // Obrigatório para Render
+  connectionString: process.env.DATABASE_URL, // Lê do ambiente (Render) ou do .env
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
 // Rota para incrementar jogadas
@@ -18,12 +20,30 @@ app.post('/incrementar-jogadas', async (req, res) => {
       `UPDATE jogadas SET valor = valor + 1 WHERE nome = $1 RETURNING valor`,
       [nomeVariavel]
     );
-    res.json({ sucesso: true, jogadas: result.rows[0].valor });
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ erro: "Variável não encontrada" });
+    }
+
+    res.json({ 
+      sucesso: true, 
+      jogadas: result.rows[0].valor 
+    });
+
   } catch (erro) {
-    res.status(500).json({ erro: erro.message });
+    console.error("Erro no PostgreSQL:", erro);
+    res.status(500).json({ erro: "Falha ao atualizar jogadas" });
   }
+});
+
+// Health check (opcional para Render)
+app.get('/', (req, res) => {
+  res.send('API de Jogadas Online');
 });
 
 // Inicia o servidor
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`API rodando na porta ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`API rodando na porta ${PORT}`);
+  console.log(`Modo: ${process.env.NODE_ENV || 'development'}`);
+});
