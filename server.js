@@ -7,8 +7,10 @@ app.use(express.json());
 
 // Configuração do PostgreSQL (Render ou local)
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL, // Lê do ambiente (Render) ou do .env
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false // Necessário para o Render
+  }
 });
 
 // Rota para incrementar jogadas
