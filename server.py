@@ -6,7 +6,7 @@ app = Flask(__name__)
 CORS(app, resources={
     r"/*": {
         "origins": [
-            "https://rococo-babka-e18f18.netlify.app",
+            "https://relaxed-cat-5cf3a5.netlify.app/",
             "https://*.netlify.app",
             "http://localhost:*"  # Para desenvolvimento local
         ]
