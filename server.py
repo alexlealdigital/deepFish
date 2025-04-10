@@ -71,6 +71,15 @@ def obter_jogadas():
     global jogadas
     return jsonify({"jogadas": jogadas})
 
+@app.route('/backup_jogadas', methods=['GET'])
+def backup_jogadas():
+    try:
+        with open('jogadas_backup.txt', 'w') as f:
+            f.write(str(load_counter()))
+        return jsonify({"status": "backup success"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     # Garante que o diretório do banco de dados existe
     os.makedirs(os.path.dirname(DATABASE), exist_ok=True)
