@@ -1,22 +1,31 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
+from flask_cors import CORS
 
 app = Flask(__name__)
+# Configuração do CORS para permitir seu domínio do Netlify e outros possíveis
+CORS(app, resources={
+    r"/*": {
+        "origins": [
+            "https://rococo-babka-e18f18.netlify.app",
+            "https://*.netlify.app",
+            "http://localhost:*"  # Para desenvolvimento local
+        ]
+    }
+})
 
-# Variável global para armazenar as jogadas
 jogadas = 0
 
-# Rota raiz para verificar se o servidor está online
 @app.route('/')
 def home():
-    return jsonify({"status": "online", "message": "Servidor funcionando!"})
+    return jsonify({"status": "online"})
 
-@app.route('/incrementar_jogadas', methods=['POST'])
+@app.route('/incrementar_jogadas', methods=['POST', 'OPTIONS'])
 def incrementar_jogadas():
     global jogadas
     jogadas += 1
     return jsonify({"jogadas": jogadas})
 
-@app.route('/obter_jogadas', methods=['GET'])
+@app.route('/obter_jogadas', methods=['GET', 'OPTIONS'])
 def obter_jogadas():
     global jogadas
     return jsonify({"jogadas": jogadas})
