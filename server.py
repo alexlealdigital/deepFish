@@ -5,6 +5,11 @@ app = Flask(__name__)
 # Variável global para armazenar as jogadas
 jogadas = 0
 
+# Rota raiz para verificar se o servidor está online
+@app.route('/')
+def home():
+    return jsonify({"status": "online", "message": "Servidor funcionando!"})
+
 @app.route('/incrementar_jogadas', methods=['POST'])
 def incrementar_jogadas():
     global jogadas
