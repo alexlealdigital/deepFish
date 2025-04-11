@@ -31,6 +31,24 @@ os.makedirs(DATA_DIR, exist_ok=True)
 DATABASE = os.path.join(DATA_DIR, 'jogadas.db')
 BACKUP_FILE = os.path.join(DATA_DIR, 'jogadas_backup.json')
 
+# Lock para operações thread-safe
+db_lock = Lock()
+
+# Inicialização do banco de dados SQLite
+def init_db():
+    with db_lock:
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS jogadas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                quantidade INTEGER NOT NULL,
+                data TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+        conn.close()
+
 # Inicialização do Firebase
 def init_firebase():
     firebase_key_json = os.environ.get("FIREBASE_KEY")
@@ -43,12 +61,77 @@ def init_firebase():
         "databaseURL": "https://adsdados-default-rtdb.firebaseio.com/"
     })
 
-# ... (restante do seu código atual)
+# Rotas da API
+@app.route('/obter_jogadas', methods=['GET'])
+def obter_jogadas():
+    try:
+        with db_lock:
+            conn = sqlite3.connect(DATABASE)
+            cursor = conn.cursor()
+            cursor.execute('SELECT SUM(quantidade) FROM jogadas')
+            total = cursor.fetchone()[0] or 0
+            conn.close()
+            
+            return jsonify({
+                'status': 'sucesso',
+                'total_jogadas': total,
+                'timestamp': datetime.now().isoformat()
+            }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'erro',
+            'mensagem': str(e)
+        }), 500
+
+@app.route('/incrementar_jogadas', methods=['POST'])
+def incrementar_jogadas():
+    try:
+        data = request.get_json()
+        quantidade = data.get('quantidade', 1)
+        
+        with db_lock:
+            # Salva no SQLite
+            conn = sqlite3.connect(DATABASE)
+            cursor = conn.cursor()
+            cursor.execute('INSERT INTO jogadas (quantidade) VALUES (?)', (quantidade,))
+            conn.commit()
+            conn.close()
+            
+            # Salva no Firebase (opcional)
+            if firebase_admin._apps:
+                ref = db.reference('jogadas')
+                ref.push({
+                    'quantidade': quantidade,
+                    'timestamp': datetime.now().isoformat()
+                })
+            
+            return jsonify({
+                'status': 'sucesso',
+                'quantidade_adicionada': quantidade
+            }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'erro',
+            'mensagem': str(e)
+        }), 500
+
+@app.route('/healthcheck', methods=['GET'])
+def healthcheck():
+    return jsonify({
+        'status': 'online',
+        'timestamp': datetime.now().isoformat()
+    }), 200
 
 if __name__ == "__main__":
     try:
+        # Inicializa bancos de dados
+        init_db()
         init_firebase()
+        
+        # Obtém porta do ambiente ou usa padrão
         port = int(os.environ.get("PORT", 10000))
+        
+        # Inicia servidor
         app.run(host="0.0.0.0", port=port)
     except Exception as e:
         print(f"❌ Erro na inicialização: {e}")
