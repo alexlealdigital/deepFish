@@ -1,6 +1,8 @@
 import os
 from dotenv import load_dotenv
 import sqlite3
+import requests
+from threading import Thread
 load_dotenv()  # Para desenvolvimento local
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -90,6 +92,27 @@ def backup_jogadas():
         return jsonify({"status": "backup success"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+def backup_to_cloud(value):
+    try:
+        # Configuração opcional para Google Drive/Dropbox
+        webhook_url = os.getenv('BACKUP_WEBHOOK')
+        if webhook_url:
+            requests.post(webhook_url, json={'jogadas': value}, timeout=3)
+    except:
+        pass  # Falha silenciosa
+
+# Modifique a rota de incremento
+@app.route('/incrementar_jogadas', methods=['POST'])
+def incrementar_jogadas():
+    global jogadas
+    jogadas += 1
+    
+    # Salva em todas as camadas
+    save_counter(jogadas)
+    Thread(target=backup_to_cloud, args=(jogadas,)).start()
+    
+    return jsonify({"jogadas": jogadas})
 
 if __name__ == '__main__':
     # Garante que o diretório do banco de dados existe
