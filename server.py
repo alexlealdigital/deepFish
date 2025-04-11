@@ -6,6 +6,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from datetime import datetime
 
+
 try:
     import requests
     import firebase_admin
@@ -15,7 +16,7 @@ except ImportError as e:
     print("Execute: pip install -r requirements.txt")
     exit(1)
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='../frontend/build')
 
 # Configuração do CORS
 CORS(app, resources={
@@ -122,17 +123,31 @@ def healthcheck():
         'timestamp': datetime.now().isoformat()
     }), 200
 
+@app.route('/', methods=['GET'])
+def serve_frontend():
+    """Rota principal para servir o frontend"""
+    return send_from_directory(app.static_folder, 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    """Serve arquivos estáticos"""
+    return send_from_directory(app.static_folder, path)
+
+# ... (rotas anteriores permanecem iguais)
+
 if __name__ == "__main__":
     try:
-        # Inicializa bancos de dados
         init_db()
         init_firebase()
-        
-        # Obtém porta do ambiente ou usa padrão
         port = int(os.environ.get("PORT", 10000))
         
-        # Inicia servidor
-        app.run(host="0.0.0.0", port=port)
+        # Configuração para produção
+        if os.environ.get('FLASK_ENV') == 'production':
+            from waitress import serve
+            serve(app, host="0.0.0.0", port=port)
+        else:
+            app.run(host="0.0.0.0", port=port, debug=True)
+            
     except Exception as e:
         print(f"❌ Erro na inicialização: {e}")
         exit(1)
