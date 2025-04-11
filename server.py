@@ -2,10 +2,9 @@ import os
 import sqlite3
 import json
 from threading import Lock
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory  # Adicionei send_from_directory aqui
 from flask_cors import CORS
 from datetime import datetime
-
 
 try:
     import requests
@@ -16,15 +15,10 @@ except ImportError as e:
     print("Execute: pip install -r requirements.txt")
     exit(1)
 
-app = Flask(__name__, static_folder='../frontend/build')
+app = Flask(__name__)
 
-# Configuração do CORS
-CORS(app, resources={
-    r"/*": {
-        "origins": ["https://deepfishgame.netlify.app", "https://*.netlify.app", "http://localhost:*"],
-        "methods": ["GET", "POST", "OPTIONS"]
-    }
-})
+# Configuração do CORS - Simplificada para desenvolvimento
+CORS(app)
 
 # Configurações de caminho
 DATA_DIR = os.path.join(os.getcwd(), 'data')
@@ -54,13 +48,18 @@ def init_db():
 def init_firebase():
     firebase_key_json = os.environ.get("FIREBASE_KEY")
     if not firebase_key_json:
-        raise ValueError("Variável FIREBASE_KEY não encontrada")
+        print("⚠️ Firebase não inicializado - Variável FIREBASE_KEY não encontrada")
+        return
     
-    cred_dict = json.loads(firebase_key_json)
-    cred = credentials.Certificate(cred_dict)
-    firebase_admin.initialize_app(cred, {
-        "databaseURL": "https://adsdados-default-rtdb.firebaseio.com/"
-    })
+    try:
+        cred_dict = json.loads(firebase_key_json)
+        cred = credentials.Certificate(cred_dict)
+        firebase_admin.initialize_app(cred, {
+            "databaseURL": "https://adsdados-default-rtdb.firebaseio.com/"
+        })
+        print("✅ Firebase inicializado com sucesso")
+    except Exception as e:
+        print(f"❌ Erro ao inicializar Firebase: {e}")
 
 # Rotas da API
 @app.route('/obter_jogadas', methods=['GET'])
@@ -98,7 +97,7 @@ def incrementar_jogadas():
             conn.commit()
             conn.close()
             
-            # Salva no Firebase (opcional)
+            # Salva no Firebase (se configurado)
             if firebase_admin._apps:
                 ref = db.reference('jogadas')
                 ref.push({
@@ -120,34 +119,41 @@ def incrementar_jogadas():
 def healthcheck():
     return jsonify({
         'status': 'online',
-        'timestamp': datetime.now().isoformat()
+        'timestamp': datetime.now().isoformat(),
+        'database': 'operacional' if os.path.exists(DATABASE) else 'não encontrado',
+        'firebase': 'conectado' if firebase_admin._apps else 'não configurado'
     }), 200
 
-@app.route('/', methods=['GET'])
-def serve_frontend():
-    """Rota principal para servir o frontend"""
-    return send_from_directory(app.static_folder, 'index.html')
-
-@app.route('/<path:path>')
-def serve_static(path):
-    """Serve arquivos estáticos"""
-    return send_from_directory(app.static_folder, path)
-
-# ... (rotas anteriores permanecem iguais)
+# Rota raiz simplificada
+@app.route('/')
+def home():
+    return jsonify({
+        'status': 'servidor operacional',
+        'api_endpoints': {
+            'obter_jogadas': '/obter_jogadas [GET]',
+            'incrementar_jogadas': '/incrementar_jogadas [POST]',
+            'healthcheck': '/healthcheck [GET]'
+        }
+    })
 
 if __name__ == "__main__":
     try:
+        # Inicializa componentes
         init_db()
         init_firebase()
+        
+        # Configuração da porta
         port = int(os.environ.get("PORT", 10000))
         
-        # Configuração para produção
+        # Modo de execução
         if os.environ.get('FLASK_ENV') == 'production':
+            print(f"🚀 Servidor iniciado em modo produção na porta {port}")
             from waitress import serve
             serve(app, host="0.0.0.0", port=port)
         else:
+            print(f"🔧 Servidor iniciado em modo desenvolvimento na porta {port}")
             app.run(host="0.0.0.0", port=port, debug=True)
             
     except Exception as e:
-        print(f"❌ Erro na inicialização: {e}")
+        print(f"❌ Erro fatal na inicialização: {e}")
         exit(1)
