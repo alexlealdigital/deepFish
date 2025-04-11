@@ -1,4 +1,6 @@
 import os
+import werkzeug
+werkzeug.cached_property = werkzeug.utils.cached_property  # Correção de compatibilidade
 from dotenv import load_dotenv
 import sqlite3
 import requests
