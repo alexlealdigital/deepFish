@@ -3,118 +3,138 @@ from dotenv import load_dotenv
 import sqlite3
 import requests
 from threading import Thread
-load_dotenv()  # Para desenvolvimento local
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
+# Carrega variáveis de ambiente
+load_dotenv()  # Para desenvolvimento local
+
 app = Flask(__name__)
-# Configuração do CORS
+
+# Configuração robusta de CORS
 CORS(app, resources={
     r"/*": {
         "origins": [
             "https://deepfishgame.netlify.app",
             "https://*.netlify.app",
             "http://localhost:*"
-        ]
+        ],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
     }
 })
 
-# Configuração do banco de dados
-DATABASE = '/var/lib/render/project/src/jogadas.db'  # Path persistente no Render
+# Configurações persistentes
+DATABASE = '/var/lib/render/project/src/jogadas.db'  # Caminho persistente no Render
+BACKUP_FILE = '/var/lib/render/project/src/jogadas_backup.json'
 
 def get_db():
+    """Conexão segura com o banco de dados SQLite"""
     db = sqlite3.connect(DATABASE)
+    db.execute("PRAGMA journal_mode=WAL")  # Melhora concorrência
     db.execute("""
         CREATE TABLE IF NOT EXISTS contador (
             id INTEGER PRIMARY KEY CHECK (id = 1),
-            valor INTEGER NOT NULL DEFAULT 0
+            valor INTEGER NOT NULL DEFAULT 0,
+            ultima_atualizacao TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    # Garante que existe exatamente um registro
-    db.execute("""
-        INSERT OR IGNORE INTO contador (id, valor) 
-        VALUES (1, 0)
-    """)
+    db.execute("INSERT OR IGNORE INTO contador (id, valor) VALUES (1, 0)")
     return db
 
 def load_counter():
+    """Carrega o contador com fallback hierárquico"""
     try:
-        # Tenta SQLite primeiro
+        # 1. Tenta SQLite primeiro
         db = get_db()
         valor = db.execute("SELECT valor FROM contador WHERE id = 1").fetchone()[0]
         db.close()
         
-        # Atualiza a variável de ambiente para sincronização
+        # 2. Atualiza ambiente e backup
         os.environ['CONTADOR_JOGADAS'] = str(valor)
+        with open(BACKUP_FILE, 'w') as f:
+            json.dump({'jogadas': valor}, f)
+            
         return valor
+        
     except Exception as e:
-        print(f"Erro SQLite, usando fallback: {e}")
-        return int(os.getenv('CONTADOR_JOGADAS', '0'))
+        print(f"Erro SQLite, tentando fallback: {e}")
+        
+        try:
+            # 3. Fallback para arquivo local
+            if os.path.exists(BACKUP_FILE):
+                with open(BACKUP_FILE) as f:
+                    return int(json.load(f)['jogadas'])
+        except:
+            # 4. Fallback final para variável de ambiente
+            return int(os.getenv('CONTADOR_JOGADAS', '0'))
 
 def save_counter(value):
+    """Salva o contador em múltiplas camadas"""
     try:
-        # Salva em SQLite
+        # 1. SQLite (camada principal)
         db = get_db()
         db.execute("UPDATE contador SET valor = ? WHERE id = 1", (value,))
         db.commit()
         db.close()
-        
-        # Atualiza variável de ambiente
-        os.environ['CONTADOR_JOGADAS'] = str(value)
     except Exception as e:
-        print(f"Erro ao salvar no SQLite: {e}")
-        os.environ['CONTADOR_JOGADAS'] = str(value)
+        print(f"Erro no SQLite: {e}")
+    
+    # 2. Variável de ambiente (sempre atualiza)
+    os.environ['CONTADOR_JOGADAS'] = str(value)
+    
+    # 3. Backup local (sincrono)
+    try:
+        with open(BACKUP_FILE, 'w') as f:
+            json.dump({'jogadas': value}, f)
+    except Exception as e:
+        print(f"Erro no backup local: {e}")
 
-# Carrega o valor inicial
+def async_backup(value):
+    """Backup assíncrono para serviços externos"""
+    try:
+        if url := os.getenv('BACKUP_WEBHOOK'):
+            requests.post(url, json={
+                'jogadas': value,
+                'service': 'deepfish'
+            }, timeout=5)
+    except:
+        pass  # Falha não crítica
+
+# Inicialização segura
+os.makedirs(os.path.dirname(DATABASE), exist_ok=True)
 jogadas = load_counter()
 
+# Endpoints
 @app.route('/')
-def home():
-    return jsonify({"status": "online", "jogadas": jogadas})
+def health_check():
+    return jsonify({
+        "status": "online",
+        "jogadas": jogadas,
+        "persistencia": "SQLite + Env Vars + Backup File"
+    })
 
 @app.route('/incrementar_jogadas', methods=['POST', 'OPTIONS'])
 def incrementar_jogadas():
     global jogadas
     jogadas += 1
     save_counter(jogadas)
+    Thread(target=async_backup, args=(jogadas,)).start()
     return jsonify({"jogadas": jogadas})
 
 @app.route('/obter_jogadas', methods=['GET', 'OPTIONS'])
 def obter_jogadas():
-    global jogadas
     return jsonify({"jogadas": jogadas})
 
-@app.route('/backup_jogadas', methods=['GET'])
-def backup_jogadas():
-    try:
-        with open('jogadas_backup.txt', 'w') as f:
-            f.write(str(load_counter()))
-        return jsonify({"status": "backup success"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-def backup_to_cloud(value):
-    try:
-        # Configuração opcional para Google Drive/Dropbox
-        webhook_url = os.getenv('BACKUP_WEBHOOK')
-        if webhook_url:
-            requests.post(webhook_url, json={'jogadas': value}, timeout=3)
-    except:
-        pass  # Falha silenciosa
-
-# Modifique a rota de incremento
-@app.route('/incrementar_jogadas', methods=['POST'])
-def incrementar_jogadas():
-    global jogadas
-    jogadas += 1
-    
-    # Salva em todas as camadas
-    save_counter(jogadas)
-    Thread(target=backup_to_cloud, args=(jogadas,)).start()
-    
-    return jsonify({"jogadas": jogadas})
+@app.route('/debug', methods=['GET'])
+def debug():
+    db_val = sqlite3.connect(DATABASE).execute("SELECT valor FROM contador WHERE id = 1").fetchone()[0]
+    return jsonify({
+        "memoria": jogadas,
+        "sqlite": db_val,
+        "ambiente": os.getenv('CONTADOR_JOGADAS'),
+        "backup_file": json.load(open(BACKUP_FILE)) if os.path.exists(BACKUP_FILE) else None
+    })
 
 if __name__ == '__main__':
-    # Garante que o diretório do banco de dados existe
-    os.makedirs(os.path.dirname(DATABASE), exist_ok=True)
-    app.run(host='0.0.0.0', port=10000)
+    app.run(host='0.0.0.0', port=10000, threaded=True)
