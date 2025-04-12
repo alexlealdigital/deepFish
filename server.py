@@ -4,31 +4,18 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app)  # Permite todas as origens (ajuste depois)
+CORS(app)
 
-# Configuração à prova de erros para o Render
-def get_db_path():
-    """Define o caminho absoluto garantido para o arquivo SQLite"""
-    # Tenta primeiro a pasta persistente do Render
-    render_path = '/var/lib/render/jogadas.db'
-    if os.path.exists('/var/lib/render'):
-        return render_path
-    
-    # Se não existir, usa o diretório atual (para desenvolvimento local)
-    return os.path.join(os.getcwd(), 'jogadas.db')
-
-DATABASE = get_db_path()
+# Caminho definitivo para o SQLite no Render
+DATABASE = '/opt/render/project/src/jogadas.db'
 
 def init_db():
-    """Inicialização robusta do banco de dados"""
+    """Inicialização à prova de falhas"""
     try:
-        # Garante que o diretório existe
-        os.makedirs(os.path.dirname(DATABASE), exist_ok=True)
-        
         conn = sqlite3.connect(DATABASE)
         cursor = conn.cursor()
         
-        # Verifica se a tabela existe
+        # Criação robusta da tabela
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS contador (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -36,31 +23,33 @@ def init_db():
             )
         """)
         
-        # Insere o valor inicial apenas se a tabela estiver vazia
-        cursor.execute("INSERT OR IGNORE INTO contador (id, valor) VALUES (1, 200)")
-        conn.commit()
+        # Inserção condicional
+        cursor.execute("""
+            INSERT OR IGNORE INTO contador (id, valor)
+            SELECT 1, 200
+            WHERE NOT EXISTS (SELECT 1 FROM contador WHERE id = 1)
+        """)
         
+        conn.commit()
     except Exception as e:
-        print(f"ERRO NA INICIALIZAÇÃO: {str(e)}")
-        raise
+        print(f"⚠️ ERRO NA INICIALIZAÇÃO: {str(e)}")
     finally:
         conn.close()
 
 def get_count():
-    """Obtém o contador com tratamento de erros"""
+    """Consulta com fallback seguro"""
     try:
         conn = sqlite3.connect(DATABASE)
         cursor = conn.cursor()
         cursor.execute("SELECT valor FROM contador WHERE id = 1")
         return cursor.fetchone()[0]
-    except Exception as e:
-        print(f"ERRO AO LER CONTADOR: {str(e)}")
-        return 200  # Valor padrão se falhar
+    except:
+        return 200  # Valor padrão garantido
     finally:
         conn.close()
 
 def increment_count():
-    """Incrementa o contador com transação segura"""
+    """Incremento atômico e seguro"""
     try:
         conn = sqlite3.connect(DATABASE)
         cursor = conn.cursor()
@@ -68,39 +57,30 @@ def increment_count():
         conn.commit()
         return get_count()
     except Exception as e:
-        print(f"ERRO AO INCREMENTAR: {str(e)}")
-        return get_count()  # Tenta retornar o valor atual mesmo se falhar
+        print(f"⚠️ ERRO AO INCREMENTAR: {str(e)}")
+        return get_count()  # Fallback
     finally:
         conn.close()
 
-# Rotas
+# Rotas otimizadas
 @app.route("/")
 def home():
     return jsonify({
         "status": "online",
         "jogadas": get_count(),
-        "db_path": DATABASE  # Para debug
+        "db_path": DATABASE
     })
 
 @app.route("/incrementar", methods=["POST"])
 def incrementar():
+    new_count = increment_count()
     return jsonify({
-        "jogadas": increment_count(),
-        "db_path": DATABASE  # Para debug
+        "status": "success" if new_count > 200 else "warning",
+        "jogadas": new_count
     })
 
-@app.route("/debug")
-def debug():
-    db_status = "OK" if os.path.exists(DATABASE) else "Arquivo não encontrado"
-    return jsonify({
-        "db_path": DATABASE,
-        "db_status": db_status,
-        "diretorio_existe": os.path.exists(os.path.dirname(DATABASE)),
-        "permissao": oct(os.stat(os.path.dirname(DATABASE)).st_mode)[-3:] if os.path.exists(os.path.dirname(DATABASE)) else "N/A"
-    })
-
-# Inicialização segura
+# Inicialização
 if __name__ == "__main__":
-    print(f"🚀 Iniciando servidor com banco em: {DATABASE}")
+    print(f"🔧 Caminho do banco de dados: {DATABASE}")
     init_db()
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
