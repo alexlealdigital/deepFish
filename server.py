@@ -14,7 +14,9 @@ DATABASE = os.path.join(os.getcwd(), 'jogadas.db')
 counter_lock = Lock()
 
 def init_db():
-    """Inicializa o banco de dados do contador"""
+    """Inicializa o banco de dados com o valor da variável de ambiente ou 0"""
+    valor_inicial = int(os.environ.get("jogadas", 0))  # Lê a variável ou usa 0
+    
     conn = sqlite3.connect(DATABASE)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS contador (
@@ -22,7 +24,8 @@ def init_db():
             valor INTEGER NOT NULL DEFAULT 0
         )
     """)
-    conn.execute("INSERT OR IGNORE INTO contador (id, valor) VALUES (1, 0)")
+    # Atualiza para usar o valor inicial da variável de ambiente
+    conn.execute("INSERT OR IGNORE INTO contador (id, valor) VALUES (1, ?)", (valor_inicial,))
     conn.commit()
     conn.close()
 
