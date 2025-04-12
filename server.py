@@ -49,19 +49,31 @@ def get_count():
         conn.close()
 
 def increment_count():
-    """Incremento atômico e seguro"""
     try:
         conn = sqlite3.connect(DATABASE)
         cursor = conn.cursor()
-        cursor.execute("UPDATE contador SET valor = valor + 1 WHERE id = 1")
+        
+        # Verifica se a tabela existe (se não, cria)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS contador (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                valor INTEGER NOT NULL DEFAULT 200
+            )
+        """)
+        
+        # Incremento ATÔMICO com fallback
+        cursor.execute("""
+            INSERT OR REPLACE INTO contador (id, valor)
+            VALUES (1, COALESCE((SELECT valor FROM contador WHERE id = 1), 200) + 1)
+        """)
+        
         conn.commit()
-        return get_count()
+        return cursor.lastrowid  # Retorna o novo valor
     except Exception as e:
-        print(f"⚠️ ERRO AO INCREMENTAR: {str(e)}")
-        return get_count()  # Fallback
+        print(f"🔥 ERRO CRÍTICO: {str(e)}")
+        return 200  # Fallback seguro
     finally:
         conn.close()
-
 # Rotas otimizadas
 @app.route("/")
 def home():
@@ -78,6 +90,17 @@ def incrementar():
         "status": "success" if new_count > 200 else "warning",
         "jogadas": new_count
     })
+
+@app.route("/debug_db")
+def debug_db():
+    try:
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM sqlite_master WHERE type='table'")
+        tables = cursor.fetchall()
+        return jsonify({"tables": tables, "db_path": DATABASE})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # Inicialização
 if __name__ == "__main__":
