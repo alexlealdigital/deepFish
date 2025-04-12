@@ -3,26 +3,32 @@ from dotenv import load_dotenv
 import sqlite3
 import json
 import requests
-from threading import Thread
+from threading import Thread, Lock
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from datetime import datetime
+import firebase_admin
+from firebase_admin import credentials, db
+import werkzeug
 
 # Correção para compatibilidade do Werkzeug
-import werkzeug
 werkzeug.cached_property = werkzeug.utils.cached_property
 
+# Carrega variáveis de ambiente
 load_dotenv()
 
+# Configuração inicial do Flask
 app = Flask(__name__)
 
-# Configuração do CORS (mantida igual)
+# Configuração do CORS
 CORS(app, resources={
     r"/*": {
         "origins": [
             "https://deepfishgame.netlify.app",
             "https://*.netlify.app",
             "http://localhost:*"
-        ]
+        ],
+        "methods": ["GET", "POST", "OPTIONS"]
     }
 })
 
