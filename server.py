@@ -2,17 +2,6 @@ import os
 import sqlite3
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from flask_httpauth import HTTPBasicAuth
-
-auth = HTTPBasicAuth()
-
-@auth.verify_password
-def verify_password(username, password):
-    return username == "admin" and password == os.getenv("ADMIN_PASS")
-
-@app.route("/reset_db", methods=["POST"])
-@auth.login_required
-def reset_db():
 
 app = Flask(__name__)
 CORS(app)
@@ -86,15 +75,6 @@ def incrementar():
     status = "success" if new_count > 200 else "warning"
     return jsonify({"jogadas": new_count, "status": status})
 
-@app.route("/admin")
-def admin():
-    return f"""
-    <h1>DeepFish Contador</h1>
-    <p>Jogadas: {get_count()}</p>
-    <form action="/reset_db" method="post">
-        <button type="submit">Resetar para 200</button>
-    </form>
-    """
 
 # Inicialização
 if __name__ == "__main__":
