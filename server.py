@@ -89,6 +89,16 @@ def incrementar():
         "db_path": DATABASE  # Para debug
     })
 
+@app.route("/debug")
+def debug():
+    db_status = "OK" if os.path.exists(DATABASE) else "Arquivo não encontrado"
+    return jsonify({
+        "db_path": DATABASE,
+        "db_status": db_status,
+        "diretorio_existe": os.path.exists(os.path.dirname(DATABASE)),
+        "permissao": oct(os.stat(os.path.dirname(DATABASE)).st_mode)[-3:] if os.path.exists(os.path.dirname(DATABASE)) else "N/A"
+    })
+
 # Inicialização segura
 if __name__ == "__main__":
     print(f"🚀 Iniciando servidor com banco em: {DATABASE}")
