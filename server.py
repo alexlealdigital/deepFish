@@ -4,39 +4,51 @@ from flask import Flask, jsonify
 import os
 from datetime import datetime
 
-# 1. Configuração do Flask
-app = Flask(__name__)
-
 def init_firebase():
     try:
-        if not firebase_admin._apps:
-            # 1. Primeiro valide a URL
-            firebase_url = os.getenv("FIREBASE_DB_URL")
-            if not firebase_url or not firebase_url.startswith("https://"):
-                raise ValueError("❌ URL do Firebase inválida. Configure FIREBASE_DB_URL corretamente!")
+        # 1. Verifica se já está inicializado
+        if firebase_admin._apps:
+            return True
+            
+        # 2. Validação EXTRA das variáveis
+        required_vars = [
+            'FIREBASE_TYPE', 'FIREBASE_PROJECT_ID', 'FIREBASE_PRIVATE_KEY_ID',
+            'FIREBASE_PRIVATE_KEY', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_DB_URL'
+        ]
+        
+        missing_vars = [var for var in required_vars if not os.getenv(var)]
+        if missing_vars:
+            raise ValueError(f"Variáveis faltando: {missing_vars}")
 
-            # 2. Crie o dicionário de credenciais CORRETAMENTE
-            cred = credentials.Certificate({
-                "type": os.getenv("FIREBASE_TYPE"),
-                "project_id": os.getenv("FIREBASE_PROJECT_ID"),
-                "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID"),
-                "private_key": os.getenv("FIREBASE_PRIVATE_KEY").replace('\\n', '\n'),
-                "client_email": os.getenv("FIREBASE_CLIENT_EMAIL"),
-                "client_id": os.getenv("FIREBASE_CLIENT_ID"),
-                "auth_uri": os.getenv("FIREBASE_AUTH_URI"),
-                "token_uri": os.getenv("FIREBASE_TOKEN_URI"),
-                "auth_provider_x509_cert_url": os.getenv("FIREBASE_AUTH_PROVIDER"),
-                "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_CERT")
-            })
+        # 3. Configuração robusta
+        cred = credentials.Certificate({
+            "type": os.getenv("FIREBASE_TYPE"),
+            "project_id": os.getenv("FIREBASE_PROJECT_ID"),
+            "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID"),
+            "private_key": os.getenv("FIREBASE_PRIVATE_KEY").replace('\\n', '\n'),
+            "client_email": os.getenv("FIREBASE_CLIENT_EMAIL"),
+            "client_id": os.getenv("FIREBASE_CLIENT_ID"),
+            "auth_uri": os.getenv("FIREBASE_AUTH_URI"),
+            "token_uri": os.getenv("FIREBASE_TOKEN_URI"),
+            "auth_provider_x509_cert_url": os.getenv("FIREBASE_AUTH_PROVIDER"),
+            "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_CERT")
+        })
 
-            # 3. Inicialize com a URL já validada
-            firebase_admin.initialize_app(cred, {
-                'databaseURL': firebase_url  # Usa a variável já validada
-            })
-            print("✅ Firebase inicializado com sucesso!")
+        # 4. Inicialização com tratamento de URL
+        firebase_url = os.getenv("FIREBASE_DB_URL").strip()
+        if not firebase_url.startswith('https://'):
+            firebase_url = f"https://{firebase_url}"
+            
+        firebase_admin.initialize_app(cred, {
+            'databaseURL': firebase_url,
+            'projectId': os.getenv("FIREBASE_PROJECT_ID")
+        })
+        
+        print("🔥 Firebase inicializado! URL:", firebase_url)
         return True
+        
     except Exception as e:
-        print(f"🔥 ERRO CRÍTICO no Firebase: {str(e)}")
+        print("❌ ERRO FATAL no Firebase:", str(e))
         return False
 
 # 3. Rotas Essenciais
