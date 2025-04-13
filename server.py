@@ -9,6 +9,10 @@ app = Flask(__name__)
 
 # 2. Inicialização do Firebase
 def init_firebase():
+# Adicione no início da função init_firebase()
+firebase_url = os.getenv("FIREBASE_DB_URL")
+if not firebase_url or not firebase_url.startswith("https://"):
+    raise ValueError("URL do Firebase inválida. Configure FIREBASE_DB_URL corretamente!")
     try:
         if not firebase_admin._apps:
             cred = credentials.Certificate({
