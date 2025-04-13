@@ -7,14 +7,16 @@ from datetime import datetime
 # 1. Configuração do Flask
 app = Flask(__name__)
 
-# 2. Inicialização do Firebase
 def init_firebase():
     try:
         if not firebase_admin._apps:
+            # 1. Primeiro valide a URL
+            firebase_url = os.getenv("FIREBASE_DB_URL")
+            if not firebase_url or not firebase_url.startswith("https://"):
+                raise ValueError("❌ URL do Firebase inválida. Configure FIREBASE_DB_URL corretamente!")
+
+            # 2. Crie o dicionário de credenciais CORRETAMENTE
             cred = credentials.Certificate({
-                firebase_url = os.getenv("FIREBASE_DB_URL")
-                if not firebase_url or not firebase_url.startswith("https://"):
-                raise ValueError("URL do Firebase inválida. Configure FIREBASE_DB_URL corretamente!")
                 "type": os.getenv("FIREBASE_TYPE"),
                 "project_id": os.getenv("FIREBASE_PROJECT_ID"),
                 "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID"),
@@ -26,12 +28,15 @@ def init_firebase():
                 "auth_provider_x509_cert_url": os.getenv("FIREBASE_AUTH_PROVIDER"),
                 "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_CERT")
             })
+
+            # 3. Inicialize com a URL já validada
             firebase_admin.initialize_app(cred, {
-                'databaseURL': os.getenv("FIREBASE_DB_URL")
+                'databaseURL': firebase_url  # Usa a variável já validada
             })
+            print("✅ Firebase inicializado com sucesso!")
         return True
     except Exception as e:
-        print(f"🔥 ERRO Firebase: {str(e)}")
+        print(f"🔥 ERRO CRÍTICO no Firebase: {str(e)}")
         return False
 
 # 3. Rotas Essenciais
