@@ -59,13 +59,18 @@ def incrementar():
 @app.route('/status', methods=['GET'])
 def get_status():
     try:
+        # Conexão direta com o Firebase
         ref = db.reference('contador')
-        current = ref.get() or 200  # Default 200 se não existir
-        app.logger.info(f"🔍 Status consultado: {current}")
-        return jsonify({"jogadas": current, "status": "success"})
+        current_value = ref.get() or 200  # Valor padrão se não existir
+        return jsonify({
+            "jogadas": current_value,
+            "status": "success"
+        }), 200
     except Exception as e:
-        app.logger.error(f"🚨 Erro no /status: {str(e)}")
-        return jsonify({"status": "error"}), 500
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
 
 @app.route('/health', methods=['GET'])
 def health_check():
