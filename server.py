@@ -72,6 +72,24 @@ def status():
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
 
+@app.route('/debug_firebase')
+def debug_firebase():
+    try:
+        ref = db.reference('contador')
+        ref.set(200)  # Reseta para teste
+        valor = ref.get()
+        return jsonify({
+            "success": True,
+            "firebase_value": valor,
+            "env_keys": list(os.environ.keys())  # Mostra variáveis carregadas
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "expected_db_url": os.getenv("FIREBASE_DB_URL")
+        }), 500
+
 # 4. Inicialização
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
