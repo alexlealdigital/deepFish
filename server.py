@@ -76,6 +76,11 @@ def get_status():
 def health_check():
     return jsonify({"status": "healthy"}), 200
 
+@app.route('/incrementar', methods=['POST'])
+def incrementar():
+    app.logger.info("Recebida requisição POST /incrementar")  # 👈 Novo log
+    # ... resto do código ...
+
 # Inicialização
 if __name__ == '__main__':
     if init_firebase():
