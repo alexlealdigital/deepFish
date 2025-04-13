@@ -110,6 +110,14 @@ def debug_firebase():
             "expected_db_url": os.getenv("FIREBASE_DB_URL")
         }), 500
 
+@app.route('/check_env')
+def check_env():
+    return jsonify({
+        "db_url": os.getenv("FIREBASE_DB_URL"),
+        "project_id": os.getenv("FIREBASE_PROJECT_ID"),
+        "vars_loaded": [k for k in os.environ if k.startswith("FIREBASE_")]
+    })
+
 # 4. Inicialização
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
