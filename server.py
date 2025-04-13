@@ -75,7 +75,6 @@ def incrementar():
     status = "success" if new_count > 200 else "warning"
     return jsonify({"jogadas": new_count, "status": status})
 
-
 # Inicialização
 if __name__ == "__main__":
     init_db()
