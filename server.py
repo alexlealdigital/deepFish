@@ -1,6 +1,6 @@
 import firebase_admin
 from firebase_admin import credentials, db
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 import os
 import logging
 
@@ -37,6 +37,35 @@ def init_firebase():
             return False
     return True
 
+# Função para obter o ranking atual (mantém apenas os 3 maiores)
+def get_current_ranking():
+    ref = db.reference('ranking')
+    # Ordena por pontuação decrescente e pega os 3 primeiros
+    ranking = ref.order_by_child('score').limit_to_last(3).get() or {}
+    # Converter para lista e ordenar para garantir a ordem decrescente
+    ranked_list = sorted(ranking.values(), key=lambda x: x['score'], reverse=True)
+    return ranked_list
+
+# Função para tentar adicionar uma nova pontuação ao ranking
+def update_ranking(name, score):
+    ranking_ref = db.reference('ranking')
+    current_ranking = get_current_ranking()
+
+    if len(current_ranking) < 3:
+        ranking_ref.push({'name': name, 'score': score})
+        return True
+    else:
+        lowest_score_entry = min(current_ranking, key=lambda x: x['score'])
+        if score > lowest_score_entry['score']:
+            # Encontrar a chave do nó a ser removido (se existir)
+            ranking_snapshot = db.reference('ranking').order_by_child('score').limit_to_first(1).get()
+            if ranking_snapshot:
+                key_to_remove = list(ranking_snapshot.keys())[0]
+                ranking_ref.child(key_to_remove).delete()
+                ranking_ref.push({'name': name, 'score': score})
+                return True
+        return False
+
 # Rotas
 @app.route('/')
 def home():
@@ -59,7 +88,8 @@ def incrementar():
 @app.route('/status', methods=['GET'])
 def get_status():
     try:
-        # Conexão direta com o Firebase
+        if not init_firebase():
+            return jsonify({"status": "error", "message": "Firebase offline"}), 500
         ref = db.reference('contador')
         current_value = ref.get() or 200  # Valor padrão se não existir
         return jsonify({
@@ -76,10 +106,38 @@ def get_status():
 def health_check():
     return jsonify({"status": "healthy"}), 200
 
-@app.route('/incrementar', methods=['POST'])
-def incrementar():
-    app.logger.info("Recebida requisição POST /incrementar")  # 👈 Novo log
-    # ... resto do código ...
+@app.route('/ranking', methods=['GET'])
+def get_ranking():
+    if not init_firebase():
+        return jsonify({"status": "error", "message": "Firebase offline"}), 500
+    try:
+        ranking_data = get_current_ranking()
+        return jsonify(ranking_data)
+    except Exception as e:
+        app.logger.error(f"🔥 Erro ao obter ranking: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/ranking', methods=['POST'])
+def submit_ranking():
+    if not init_firebase():
+        return jsonify({"status": "error", "message": "Firebase offline"}), 500
+    try:
+        data = request.form
+        name = data.get('nome')
+        score = int(data.get('pontuacao'))
+
+        if name and isinstance(score, int):
+            if update_ranking(name, score):
+                app.logger.info(f"🏆 Ranking atualizado com: {name} - {score}")
+                return jsonify({"status": "success", "message": "Ranking atualizado"})
+            else:
+                app.logger.info(f"🏅 Pontuação não entrou no ranking: {name} - {score}")
+                return jsonify({"status": "info", "message": "Pontuação não é alta o suficiente para o ranking"})
+        else:
+            return jsonify({"status": "error", "message": "Parâmetros 'nome' e 'pontuacao' são necessários"}), 400
+    except Exception as e:
+        app.logger.error(f"🚨 Erro ao enviar ranking: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 # Inicialização
 if __name__ == '__main__':
