@@ -113,7 +113,7 @@ def get_ranking():
         app.logger.error(f"🔥 Erro ao obter ranking: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route('/ranking', methods=['POST'])
+@app.route('/api/ranking', methods=['POST'])  # Nova rota
 def submit_ranking():
     if not init_firebase():
         return jsonify({"status": "error", "message": "Firebase offline"}), 500
