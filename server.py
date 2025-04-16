@@ -64,49 +64,58 @@ def get_status():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # ================= ROTAS RANKING =================
-@app.route('/api/ranking', methods=['GET', 'POST'])
-def handle_ranking():
+@app.route('/api/ranking', methods=['GET'])
+def get_ranking():
     if not init_firebase():
         return jsonify({"status": "error", "message": "Firebase offline"}), 500
 
-    if request.method == 'GET':
-        try:
-            ref = db.reference('ranking')
-            scores = ref.order_by_child('score').limit_to_last(3).get() or {}
-            ranked = sorted(scores.values(), key=lambda x: x['score'], reverse=True)
-            return jsonify({
-                "topPlayers": [
-                    {"playerName": e.get('name', 'Anônimo'), "score": e['score']}
-                    for e in ranked
-                ]
-            })
-        except Exception as e:
-            app.logger.error(f"🔥 Erro ao buscar ranking: {str(e)}")
-            return jsonify({"error": str(e)}), 500
+    try:
+        ref = db.reference('ranking')
+        scores = ref.order_by_child('score').limit_to_last(3).get() or {}
+        ranked = sorted(scores.values(), key=lambda x: x['score'], reverse=True)
+        return jsonify({
+            "topPlayers": [
+                {"playerName": e.get('name', 'Anônimo'), "score": e['score']}
+                for e in ranked
+            ]
+        })
+    except Exception as e:
+        app.logger.error(f"🔥 Erro ao buscar ranking: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
-    elif request.method == 'POST':
-        try:
-            data = request.get_json()
-            name = data.get('name')
-            score = int(data.get('score', 0))
+@app.route('/api/ranking', methods=['POST'])
+def add_to_ranking():
+    if not init_firebase():
+        return jsonify({"status": "error", "message": "Firebase offline"}), 500
 
-            if not name:
-                return jsonify({"error": "Nome é obrigatório"}), 400
+    try:
+        data = request.get_json()
+        name = data.get('name')
+        score = data.get('score')
 
-            # Verifica se entra no top 3
-            top_scores = db.reference('ranking').order_by_child('score').limit_to_last(3).get() or {}
-            min_score = min([v['score'] for v in top_scores.values()]) if top_scores else 0
+        if not isinstance(score, int):
+            try:
+                score = int(score)
+            except (ValueError, TypeError):
+                return jsonify({"error": "Pontuação inválida"}), 400
 
-            if len(top_scores) < 3 or score > min_score:
-                db.reference('ranking').push({"name": name, "score": score})
-                app.logger.info(f"🏆 Novo recorde: {name} - {score}")
-                return jsonify({"success": True, "message": "Ranking atualizado"})
-            
-            return jsonify({"success": False, "message": "Pontuação não suficiente"})
+        if not name:
+            return jsonify({"error": "Nome é obrigatório"}), 400
 
-        except Exception as e:
-            app.logger.error(f"🚨 Erro ao atualizar ranking: {str(e)}")
-            return jsonify({"error": str(e)}), 400
+        ranking_ref = db.reference('ranking')
+        top_scores = ranking_ref.order_by_child('score').limit_to_last(3).get() or {}
+        min_score = min([v['score'] for v in top_scores.values()]) if top_scores and top_scores.values() else 0
+
+        if len(top_scores) < 3 or score > min_score:
+            ranking_ref.push({"name": name, "score": score})
+            app.logger.info(f"🏆 Novo recorde: {name} - {score}")
+            return jsonify({"success": True, "message": "Ranking atualizado"})
+        else:
+            return jsonify({"success": False, "message": "Pontuação não suficiente para entrar no top 3"})
+
+    except Exception as e:
+        app.logger.error(f"🚨 Erro ao atualizar ranking: {str(e)}")
+        return jsonify({"error": str(e)}), 400
 
 # ================= ROTAS AUXILIARES =================
 @app.route('/')
