@@ -8,7 +8,7 @@ import logging
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
 
-# Credenciais do Firebase (Render Environment Variables)
+# Credenciais do Firebase
 FIREBASE_CREDENTIALS = {
     "type": os.getenv("FIREBASE_TYPE"),
     "project_id": os.getenv("FIREBASE_PROJECT_ID"),
@@ -22,7 +22,7 @@ FIREBASE_CREDENTIALS = {
     "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_CERT")
 }
 
-# ================= FIREBASE INIT =================
+# ================= INICIALIZAÇÃO FIREBASE =================
 def init_firebase():
     if not firebase_admin._apps:
         try:
@@ -37,7 +37,7 @@ def init_firebase():
             return False
     return True
 
-# ================= ROTAS CONTADOR DE JOGADAS =================
+# ================= ROTAS CONTADOR =================
 @app.route('/incrementar', methods=['POST'])
 def incrementar():
     if not init_firebase():
@@ -72,11 +72,13 @@ def get_ranking():
     try:
         ref = db.reference('ranking')
         scores = ref.order_by_child('score').limit_to_last(3).get() or {}
-        ranked_players = []
-        for key, data in scores.items():
-            ranked_players.append({"playerName": data.get('name', 'Anônimo'), "score": data['score']})
-        ranked = sorted(ranked_players, key=lambda x: x['score'], reverse=True)
-        return jsonify({"topPlayers": ranked})
+        ranked = sorted(scores.values(), key=lambda x: x['score'], reverse=True)
+        return jsonify({
+            "topPlayers": [
+                {"playerName": e.get('name', 'Anônimo'), "score": e['score']}
+                for e in ranked
+            ]
+        })
     except Exception as e:
         app.logger.error(f"🔥 Erro ao buscar ranking: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -87,21 +89,36 @@ def add_to_ranking():
         return jsonify({"status": "error", "message": "Firebase offline"}), 500
 
     try:
-        # Força o parsing como JSON independente do Content-Type
-        if not request.is_json:
-            return jsonify({"error": "Content-Type deve ser application/json"}), 415
-            
-        data = request.get_json(force=True)  # force=True para casos onde o header pode estar mal configurado
-        app.logger.info(f"Dados brutos recebidos: {request.data}")
-        app.logger.info(f"Dados parseados: {data}")
-
+        data = request.get_json()
         if not data:
-            return jsonify({"error": "Corpo da requisição vazio ou inválido"}), 400
+            return jsonify({"error": "Dados inválidos"}), 400
 
         name = data.get('name')
         score = data.get('score')
 
-        # Restante da lógica permanece igual...
+        if not name or score is None:
+            return jsonify({"error": "Nome e pontuação são obrigatórios"}), 400
+
+        try:
+            score = int(score)
+        except ValueError:
+            return jsonify({"error": "Pontuação deve ser um número"}), 400
+
+        # Lógica de atualização do ranking
+        ref = db.reference('ranking')
+        top_scores = ref.order_by_child('score').limit_to_last(3).get() or {}
+        min_score = min([v['score'] for v in top_scores.values()]) if top_scores else 0
+
+        if len(top_scores) < 3 or score > min_score:
+            ref.push({"name": name, "score": score})
+            return jsonify({"success": True})
+        
+        return jsonify({"success": False, "message": "Pontuação insuficiente"})
+
+    except Exception as e:
+        app.logger.error(f"🚨 Erro: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 # ================= ROTAS AUXILIARES =================
 @app.route('/')
 def home():
