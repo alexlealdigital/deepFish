@@ -113,6 +113,26 @@ def get_ranking():
         app.logger.error(f"🔥 Erro ao obter ranking: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route('/api/ranking', methods=['GET', 'POST'])  # ← Adicione GET aqui
+def handle_ranking():
+    if request.method == 'GET':
+        try:
+            ref = db.reference('ranking')
+            scores = ref.order_by_child('score').limit_to_last(3).get() or {}
+            ranked = sorted(scores.values(), key=lambda x: x['score'], reverse=True)
+            return jsonify({
+                "topPlayers": [
+                    {"playerName": e.get('name', 'Anônimo'), "score": e['score']}
+                    for e in ranked
+                ]
+            })
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+            
+    elif request.method == 'POST':
+        
+        # ... (mantenha sua lógica POST existente)
+
 @app.route('/api/ranking', methods=['POST'])  # Nova rota
 def submit_ranking():
     if not init_firebase():
