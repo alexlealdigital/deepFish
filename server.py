@@ -87,36 +87,49 @@ def add_to_ranking():
         return jsonify({"status": "error", "message": "Firebase offline"}), 500
 
     try:
-        data = request.get_json()
-        name = data.get('name')
-        score = data.get('score')
-
-        if not name:
-            return jsonify({"error": "O campo 'name' é obrigatório"}), 400
-
-        if score is None:
-            return jsonify({"error": "O campo 'score' é obrigatório"}), 400
-
+        app.logger.info("➡️ Requisição POST recebida em /api/ranking")
+        app.logger.info(f"➡️ Content-Type da requisição: {request.headers.get('Content-Type')}")
         try:
-            score = int(score)
-        except ValueError:
-            return jsonify({"error": "O campo 'score' deve ser um número inteiro"}), 400
+            data = request.get_json()
+            app.logger.info(f"➡️ Dados JSON recebidos: {data}")
+            name = data.get('name')
+            score = data.get('score')
+            app.logger.info(f"➡️ Nome extraído: {name}, Pontuação extraída: {score}")
 
-        ranking_ref = db.reference('ranking')
-        top_scores = ranking_ref.order_by_child('score').limit_to_last(3).get() or {}
-        min_score = min([v['score'] for v in top_scores.values()]) if top_scores and top_scores.values() else -1
+            if not name:
+                app.logger.warning("⚠️ Campo 'name' ausente na requisição")
+                return jsonify({"error": "O campo 'name' é obrigatório"}), 400
 
-        if len(top_scores) < 3 or score > min_score:
-            ranking_ref.push({"name": name, "score": score})
-            app.logger.info(f"🏆 Novo recorde ou entrada no top 3: {name} - {score}")
-            return jsonify({"success": True, "message": "Ranking atualizado"})
-        else:
-            return jsonify({"success": False, "message": "Pontuação não suficiente para entrar no top 3"})
+            if score is None:
+                app.logger.warning("⚠️ Campo 'score' ausente na requisição")
+                return jsonify({"error": "O campo 'score' é obrigatório"}), 400
+
+            try:
+                score = int(score)
+                app.logger.info(f"➡️ Pontuação convertida para inteiro: {score}")
+            except ValueError:
+                app.logger.warning(f"⚠️ Erro ao converter 'score' para inteiro: {score}")
+                return jsonify({"error": "O campo 'score' deve ser um número inteiro"}), 400
+
+            ranking_ref = db.reference('ranking')
+            top_scores = ranking_ref.order_by_child('score').limit_to_last(3).get() or {}
+            min_score = min([v['score'] for v in top_scores.values()]) if top_scores and top_scores.values() else -1
+
+            if len(top_scores) < 3 or score > min_score:
+                ranking_ref.push({"name": name, "score": score})
+                app.logger.info(f"🏆 Novo recorde ou entrada no top 3: {name} - {score}")
+                return jsonify({"success": True, "message": "Ranking atualizado"})
+            else:
+                app.logger.info(f"ℹ️ Pontuação {score} não suficiente para o top 3")
+                return jsonify({"success": False, "message": "Pontuação não suficiente para entrar no top 3"})
+
+        except Exception as e:
+            app.logger.error(f"🚨 Erro ao processar JSON: {str(e)}")
+            return jsonify({"error": f"Erro ao processar JSON: {str(e)}"}), 400
 
     except Exception as e:
-        app.logger.error(f"🚨 Erro ao atualizar ranking: {str(e)}")
-        return jsonify({"error": str(e)}), 400
-
+        app.logger.error(f"🚨 Erro geral na função add_to_ranking: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 # ================= ROTAS AUXILIARES =================
 @app.route('/')
 def home():
