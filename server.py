@@ -147,6 +147,31 @@ def submit_ranking():
         app.logger.error(f"🚨 Erro ao enviar ranking: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
+# Adicione ESTA FUNÇÃO (mantenha o resto do arquivo)
+def update_ranking_safe(name, score):
+    ref = db.reference('ranking')
+    try:
+        # Verifica se merece entrar no top 3
+        top_scores = ref.order_by_child('score').limit_to_last(3).get() or {}
+        min_score = min([v['score'] for v in top_scores.values()]) if top_scores else 0
+        
+        if len(top_scores) < 3 or score > min_score:
+            new_entry = ref.push({"name": name, "score": score})
+            return True
+        return False
+    except Exception as e:
+        app.logger.error(f"Erro ao atualizar ranking: {str(e)}")
+        return False
+
+@app.route('/api/ranking', methods=['POST'])
+def add_score():
+    try:
+        data = request.get_json()
+        success = update_ranking_safe(data['name'], int(data['score']))
+        return jsonify({"success": success})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
 # 6. Inicialização (no final do arquivo)
 if __name__ == '__main__':
     if init_firebase():
