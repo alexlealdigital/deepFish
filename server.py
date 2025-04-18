@@ -63,22 +63,16 @@ def get_status():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# ================= ROTAS RANKING =================
-@app.route('/api/ranking', methods=['GET'])
-def get_ranking():
+# ================= ROTAS RANKING (MODIFICADO) =================
+@app.route('/ranking.json', methods=['GET'])
+def get_ranking_direct():
     if not init_firebase():
         return jsonify({"status": "error", "message": "Firebase offline"}), 500
 
     try:
         ref = db.reference('ranking')
         scores = ref.order_by_child('score').limit_to_last(3).get() or {}
-        ranked = sorted(scores.values(), key=lambda x: x['score'], reverse=True)
-        return jsonify({
-            "topPlayers": [
-                {"playerName": e.get('name', 'Anônimo'), "score": e['score']}
-                for e in ranked
-            ]
-        })
+        return jsonify(scores)
     except Exception as e:
         app.logger.error(f"🔥 Erro ao buscar ranking: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -112,7 +106,7 @@ def add_to_ranking():
         if len(top_scores) < 3 or score > min_score:
             ref.push({"name": name, "score": score})
             return jsonify({"success": True})
-        
+
         return jsonify({"success": False, "message": "Pontuação insuficiente"})
 
     except Exception as e:
