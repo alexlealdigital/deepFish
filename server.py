@@ -39,55 +39,29 @@ def init_firebase():
 
 # ================= ROTAS CONTADOR (Mantenha suas rotas) =================
 @app.route('/incrementar', methods=['POST'])
-
 def incrementar():
+    if not init_firebase():
+        return jsonify({"status": "error", "message": "Firebase offline"}), 500
 
-   if not init_firebase():
-
-        return jsonify({"status": "error", "message": "Firebase offline"}), 500
-
-
-
-    try:
-
-        ref = db.reference('contador')
-
-        novo_valor = ref.transaction(lambda current: (current or 200) + 1)
-
-        app.logger.info(f"➡️ Incrementado: {novo_valor}")
-
-        return jsonify({"status": "success", "jogadas": novo_valor})
-
-    except Exception as e:
-
-        app.logger.error(f"🚨 Erro ao incrementar: {str(e)}")
-
-        return jsonify({"status": "error"}), 500
-
-
+    try:
+        ref = db.reference('contador')
+        novo_valor = ref.transaction(lambda current: (current or 200) + 1)
+        app.logger.info(f"➡️ Incrementado: {novo_valor}")
+        return jsonify({"status": "success", "jogadas": novo_valor})
+    except Exception as e:
+        app.logger.error(f"🚨 Erro ao incrementar: {str(e)}")
+        return jsonify({"status": "error"}), 500
 
 @app.route('/status', methods=['GET'])
-
 def get_status():
-
-    try:
-
-        if not init_firebase():
-
-            return jsonify({"status": "error", "message": "Firebase offline"}), 500
-
-        ref = db.reference('contador')
-
-        current_value = ref.get() or 200
-
-        return jsonify({"jogadas": current_value, "status": "success"}), 200
-
-    except Exception as e:
-
-        return jsonify({"status": "error", "message": str(e)}), 500
-        app.logger.error(f"🚨 Erro ao incrementar: {str(e)}")
-
-        return jsonify({"status": "error"}), 500
+    try:
+        if not init_firebase():
+            return jsonify({"status": "error", "message": "Firebase offline"}), 500
+        ref = db.reference('contador')
+        current_value = ref.get() or 200
+        return jsonify({"jogadas": current_value, "status": "success"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 # ================= ROTAS RANKING (MODIFICADO PARA LISTA) =================
 @app.route('/ranking.json', methods=['GET'])
@@ -110,88 +84,49 @@ def get_ranking_direct_list():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/ranking', methods=['POST'])
-
 def add_to_ranking():
+    if not init_firebase():
+        return jsonify({"status": "error", "message": "Firebase offline"}), 500
 
-    if not init_firebase():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Dados inválidos"}), 400
 
-        return jsonify({"status": "error", "message": "Firebase offline"}), 500
+        name = data.get('name')
+        score = data.get('score')
 
+        if not name or score is None:
+            return jsonify({"error": "Nome e pontuação são obrigatórios"}), 400
 
+        try:
+            score = int(score)
+        except ValueError:
+            return jsonify({"error": "Pontuação deve ser um número"}), 400
 
-    try:
+        # Lógica de atualização do ranking
+        ref = db.reference('ranking')
+        top_scores = ref.order_by_child('score').limit_to_last(3).get() or {}
+        min_score = min([v['score'] for v in top_scores.values()]) if top_scores else 0
 
-        data = request.get_json()
+        if len(top_scores) < 3 or score > min_score:
+            ref.push({"name": name, "score": score})
+            return jsonify({"success": True})
 
-        if not data:
+        return jsonify({"success": False, "message": "Pontuação insuficiente"})
 
-            return jsonify({"error": "Dados inválidos"}), 400
-
-
-
-        name = data.get('name')
-
-        score = data.get('score')
-
-
-
-        if not name or score is None:
-
-            return jsonify({"error": "Nome e pontuação são obrigatórios"}), 400
-
-
-
-        try:
-
-            score = int(score)
-
-        except ValueError:
-
-            return jsonify({"error": "Pontuação deve ser um número"}), 400
-
-
-
-        # Lógica de atualização do ranking
-
-        ref = db.reference('ranking')
-
-        top_scores = ref.order_by_child('score').limit_to_last(3).get() or {}
-
-        min_score = min([v['score'] for v in top_scores.values()]) if top_scores else 0
-
-
-
-        if len(top_scores) < 3 or score > min_score:
-
-            ref.push({"name": name, "score": score})
-
-            return jsonify({"success": True})
-
-
-
-        return jsonify({"success": False, "message": "Pontuação insuficiente"})
-
-
-
-    except Exception as e:
-
-        app.logger.error(f"🚨 Erro: {str(e)}")
-
-        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        app.logger.error(f"🚨 Erro: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 # ================= ROTAS AUXILIARES (Mantenha suas rotas) =================
 @app.route('/')
-
 def home():
-
-    return jsonify({"status": "online", "message": "Bem-vindo ao DeepFish!"})
-
+    return jsonify({"status": "online", "message": "Bem-vindo ao DeepFish!"})
 
 @app.route('/health', methods=['GET'])
-
 def health_check():
-
-    return jsonify({"status": "healthy"}), 200
+    return jsonify({"status": "healthy"}), 200
 
 # ================= INICIALIZAÇÃO =================
 if __name__ == '__main__':
