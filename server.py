@@ -37,6 +37,7 @@ def init_firebase():
             return False
     return True
 
+# ================= ROTAS CONTADOR (Mantenha suas rotas) =================
 @app.route('/incrementar', methods=['POST'])
 
 def incrementar():
@@ -109,17 +110,88 @@ def get_ranking_direct_list():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/ranking', methods=['POST'])
+
 def add_to_ranking():
-    # ... (seu código) ...
+
+    if not init_firebase():
+
+        return jsonify({"status": "error", "message": "Firebase offline"}), 500
+
+
+
+    try:
+
+        data = request.get_json()
+
+        if not data:
+
+            return jsonify({"error": "Dados inválidos"}), 400
+
+
+
+        name = data.get('name')
+
+        score = data.get('score')
+
+
+
+        if not name or score is None:
+
+            return jsonify({"error": "Nome e pontuação são obrigatórios"}), 400
+
+
+
+        try:
+
+            score = int(score)
+
+        except ValueError:
+
+            return jsonify({"error": "Pontuação deve ser um número"}), 400
+
+
+
+        # Lógica de atualização do ranking
+
+        ref = db.reference('ranking')
+
+        top_scores = ref.order_by_child('score').limit_to_last(3).get() or {}
+
+        min_score = min([v['score'] for v in top_scores.values()]) if top_scores else 0
+
+
+
+        if len(top_scores) < 3 or score > min_score:
+
+            ref.push({"name": name, "score": score})
+
+            return jsonify({"success": True})
+
+
+
+        return jsonify({"success": False, "message": "Pontuação insuficiente"})
+
+
+
+    except Exception as e:
+
+        app.logger.error(f"🚨 Erro: {str(e)}")
+
+        return jsonify({"error": str(e)}), 500
 
 # ================= ROTAS AUXILIARES (Mantenha suas rotas) =================
 @app.route('/')
+
 def home():
-    # ... (seu código) ...
+
+    return jsonify({"status": "online", "message": "Bem-vindo ao DeepFish!"})
+
 
 @app.route('/health', methods=['GET'])
+
 def health_check():
-    # ... (seu código) ...
+
+    return jsonify({"status": "healthy"}), 200
 
 # ================= INICIALIZAÇÃO =================
 if __name__ == '__main__':
