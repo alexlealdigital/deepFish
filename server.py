@@ -37,14 +37,56 @@ def init_firebase():
             return False
     return True
 
-# ================= ROTAS CONTADOR (Mantenha suas rotas) =================
 @app.route('/incrementar', methods=['POST'])
+
 def incrementar():
-    # ... (seu código) ...
+
+    if not init_firebase():
+
+        return jsonify({"status": "error", "message": "Firebase offline"}), 500
+
+
+
+    try:
+
+        ref = db.reference('contador')
+
+        novo_valor = ref.transaction(lambda current: (current or 200) + 1)
+
+        app.logger.info(f"➡️ Incrementado: {novo_valor}")
+
+        return jsonify({"status": "success", "jogadas": novo_valor})
+
+    except Exception as e:
+
+        app.logger.error(f"🚨 Erro ao incrementar: {str(e)}")
+
+        return jsonify({"status": "error"}), 500
+
+
 
 @app.route('/status', methods=['GET'])
+
 def get_status():
-    # ... (seu código) ...
+
+    try:
+
+        if not init_firebase():
+
+            return jsonify({"status": "error", "message": "Firebase offline"}), 500
+
+        ref = db.reference('contador')
+
+        current_value = ref.get() or 200
+
+        return jsonify({"jogadas": current_value, "status": "success"}), 200
+
+    except Exception as e:
+
+        return jsonify({"status": "error", "message": str(e)}), 500
+        app.logger.error(f"🚨 Erro ao incrementar: {str(e)}")
+
+        return jsonify({"status": "error"}), 500
 
 # ================= ROTAS RANKING (MODIFICADO PARA LISTA) =================
 @app.route('/ranking.json', methods=['GET'])
