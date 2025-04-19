@@ -42,7 +42,7 @@ def init_firebase():
 
 def incrementar():
 
-    if not init_firebase():
+   if not init_firebase():
 
         return jsonify({"status": "error", "message": "Firebase offline"}), 500
 
