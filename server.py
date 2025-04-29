@@ -8,7 +8,7 @@ import logging
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
 
-# Credenciais do Firebase (Mantenha suas configurações)
+# Credenciais do Firebase (mantenha suas configurações originais)
 FIREBASE_CREDENTIALS = {
     "type": os.getenv("FIREBASE_TYPE"),
     "project_id": os.getenv("FIREBASE_PROJECT_ID"),
@@ -37,7 +37,7 @@ def init_firebase():
             return False
     return True
 
-# ================= ROTAS CONTADOR (Mantenha suas rotas) =================
+# ================= ROTAS CONTADOR (mantidas originais) =================
 @app.route('/incrementar', methods=['POST'])
 def incrementar():
     if not init_firebase():
@@ -63,22 +63,24 @@ def get_status():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# ================= ROTAS RANKING (MODIFICADO PARA LISTA) =================
-@app.route('/ranking.json', methods=['GET'])
-def get_ranking_direct_list():
+# ================= ROTAS RANKING (ajustadas para sua estrutura) =================
+@app.route('/api/ranking', methods=['GET'])
+def get_ranking():
     if not init_firebase():
         return jsonify({"status": "error", "message": "Firebase offline"}), 500
 
     try:
         ref = db.reference('ranking')
-        top_scores_dict = ref.order_by_child('score').limit_to_last(3).get() or {}
-        # Converter o dicionário para uma lista de objetos
-        top_scores_list = []
-        for key, value in top_scores_dict.items():
-            top_scores_list.append({"name": value.get("name"), "score": value.get("score")})
-        # Inverter a lista para ter os maiores scores primeiro
-        top_scores_list.reverse()
-        return jsonify(top_scores_list)
+        scores = ref.order_by_child('score').limit_to_last(3).get() or {}
+        
+        # Converter para lista ordenada
+        ranked_list = [
+            {"playerName": value.get('name', 'Anônimo'), "score": value['score']}
+            for key, value in scores.items()
+        ]
+        ranked_list.sort(key=lambda x: x['score'], reverse=True)
+        
+        return jsonify({"topPlayers": ranked_list})
     except Exception as e:
         app.logger.error(f"🔥 Erro ao buscar ranking: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -93,33 +95,39 @@ def add_to_ranking():
         if not data:
             return jsonify({"error": "Dados inválidos"}), 400
 
-        name = data.get('name')
+        name = data.get('name', '').strip()
         score = data.get('score')
 
-        if not name or score is None:
-            return jsonify({"error": "Nome e pontuação são obrigatórios"}), 400
+        if not name:
+            return jsonify({"error": "Nome é obrigatório"}), 400
 
         try:
             score = int(score)
-        except ValueError:
-            return jsonify({"error": "Pontuação deve ser um número"}), 400
+        except (ValueError, TypeError):
+            return jsonify({"error": "Pontuação deve ser um número válido"}), 400
 
-        # Lógica de atualização do ranking
         ref = db.reference('ranking')
         top_scores = ref.order_by_child('score').limit_to_last(3).get() or {}
         min_score = min([v['score'] for v in top_scores.values()]) if top_scores else 0
 
         if len(top_scores) < 3 or score > min_score:
-            ref.push({"name": name, "score": score})
-            return jsonify({"success": True})
+            new_entry = ref.push({"name": name, "score": score})
+            return jsonify({
+                "success": True,
+                "message": "Ranking atualizado!",
+                "currentTop": min_score
+            })
 
-        return jsonify({"success": False, "message": "Pontuação insuficiente"})
+        return jsonify({
+            "success": False,
+            "message": f"Pontuação mínima para o Top 3: {min_score + 1}"
+        })
 
     except Exception as e:
-        app.logger.error(f"🚨 Erro: {str(e)}")
+        app.logger.error(f"🚨 Erro ao adicionar pontuação: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-# ================= ROTAS AUXILIARES (Mantenha suas rotas) =================
+# ================= ROTAS AUXILIARES (mantidas originais) =================
 @app.route('/')
 def home():
     return jsonify({"status": "online", "message": "Bem-vindo ao DeepFish!"})
