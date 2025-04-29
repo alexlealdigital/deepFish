@@ -91,20 +91,25 @@ def add_to_ranking():
         return jsonify({"status": "error", "message": "Firebase offline"}), 500
 
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "Dados inválidos"}), 400
+        # Verifica explicitamente o Content-Type
+        if not request.is_json:
+            return jsonify({"error": "Content-Type deve ser application/json"}), 415
+            
+        # Força o parsing mesmo se o header estiver mal formatado
+        data = request.get_json(force=True, silent=True)
+        if data is None:
+            return jsonify({"error": "Dados JSON inválidos ou mal formatados"}), 400
+
+        app.logger.info(f"Dados recebidos: {data}")  # Log para debug
 
         name = data.get('name', '').strip()
-        score = data.get('score')
+        try:
+            score = int(data.get('score', 0))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Pontuação deve ser um número inteiro"}), 400
 
         if not name:
             return jsonify({"error": "Nome é obrigatório"}), 400
-
-        try:
-            score = int(score)
-        except (ValueError, TypeError):
-            return jsonify({"error": "Pontuação deve ser um número válido"}), 400
 
         ref = db.reference('ranking')
         top_scores = ref.order_by_child('score').limit_to_last(3).get() or {}
@@ -115,18 +120,22 @@ def add_to_ranking():
             return jsonify({
                 "success": True,
                 "message": "Ranking atualizado!",
-                "currentTop": min_score
+                "position": "Top 3" if len(top_scores) < 3 else f"Posição {len(top_scores)}"
             })
 
         return jsonify({
             "success": False,
-            "message": f"Pontuação mínima para o Top 3: {min_score + 1}"
+            "message": f"Pontuação mínima para o Top 3: {min_score + 1}",
+            "currentTop3": [
+                {"name": v['name'], "score": v['score']} 
+                for v in top_scores.values()
+            ]
         })
 
     except Exception as e:
-        app.logger.error(f"🚨 Erro ao adicionar pontuação: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
+        app.logger.error(f"ERRO CRÍTICO: {str(e)}")
+        return jsonify({"error": "Erro interno no servidor"}), 500
+        
 # ================= ROTAS AUXILIARES (mantidas originais) =================
 @app.route('/')
 def home():
