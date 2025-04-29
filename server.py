@@ -88,53 +88,50 @@ def get_ranking():
 @app.route('/api/ranking', methods=['POST'])
 def add_to_ranking():
     if not init_firebase():
-        return jsonify({"status": "error", "message": "Firebase offline"}), 500
+        return jsonify({"error": "Firebase offline"}), 500
 
     try:
-        # Verifica explicitamente o Content-Type
-        if not request.is_json:
-            return jsonify({"error": "Content-Type deve ser application/json"}), 415
-            
-        # Força o parsing mesmo se o header estiver mal formatado
-        data = request.get_json(force=True, silent=True)
-        if data is None:
-            return jsonify({"error": "Dados JSON inválidos ou mal formatados"}), 400
-
-        app.logger.info(f"Dados recebidos: {data}")  # Log para debug
-
+        data = request.get_json()
         name = data.get('name', '').strip()
-        try:
-            score = int(data.get('score', 0))
-        except (TypeError, ValueError):
-            return jsonify({"error": "Pontuação deve ser um número inteiro"}), 400
-
-        if not name:
-            return jsonify({"error": "Nome é obrigatório"}), 400
+        score = int(data.get('score', 0))
 
         ref = db.reference('ranking')
+        
+        # 1. Busca os 3 melhores scores (ordenados por score crescente)
         top_scores = ref.order_by_child('score').limit_to_last(3).get() or {}
-        min_score = min([v['score'] for v in top_scores.values()]) if top_scores else 0
+        
+        # 2. Se já tem 3 registros, pega o menor score
+        min_score = min([v['score'] for v in top_scores.values()]) if len(top_scores) >= 3 else 0
 
+        # 3. Lógica de substituição
         if len(top_scores) < 3 or score > min_score:
-            new_entry = ref.push({"name": name, "score": score})
+            if len(top_scores) >= 3:
+                # Encontra e remove o registro com menor score
+                for key, value in top_scores.items():
+                    if value['score'] == min_score:
+                        ref.child(key).delete()
+                        break
+            
+            # Adiciona o novo registro
+            new_entry = ref.push({
+                "name": name,
+                "score": score
+            })
+            
             return jsonify({
                 "success": True,
                 "message": "Ranking atualizado!",
-                "position": "Top 3" if len(top_scores) < 3 else f"Posição {len(top_scores)}"
+                "action": "substituiu" if len(top_scores) >= 3 else "adicionou"
             })
-
+        
         return jsonify({
             "success": False,
-            "message": f"Pontuação mínima para o Top 3: {min_score + 1}",
-            "currentTop3": [
-                {"name": v['name'], "score": v['score']} 
-                for v in top_scores.values()
-            ]
+            "message": f"Pontuação muito baixa. Mínimo para Top 3: {min_score + 1}"
         })
 
     except Exception as e:
-        app.logger.error(f"ERRO CRÍTICO: {str(e)}")
-        return jsonify({"error": "Erro interno no servidor"}), 500
+        app.logger.error(f"Erro: {str(e)}")
+        return jsonify({"error": str(e)}), 500
         
 # ================= ROTAS AUXILIARES (mantidas originais) =================
 @app.route('/')
