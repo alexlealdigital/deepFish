@@ -3,6 +3,9 @@ from firebase_admin import credentials, db
 from flask import Flask, jsonify, request
 import os
 import logging
+from flask_cors import CORS
+app = Flask(__name__)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # ================= CONFIGURAÇÃO INICIAL =================
 app = Flask(__name__)
@@ -87,6 +90,7 @@ def get_ranking():
 
 @app.route('/api/ranking', methods=['POST'])
 def add_to_ranking():
+    app.logger.info(f"Dados recebidos: {request.data}")
     if not init_firebase():
         return jsonify({"error": "Firebase offline"}), 500
 
