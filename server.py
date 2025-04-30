@@ -4,6 +4,36 @@ from flask import Flask, jsonify, request
 import os
 import logging
 from flask_cors import CORS
+
+app = Flask(__name__)
+
+# Configuração COMPLETA de CORS
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["*"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"],
+        "supports_credentials": True,
+        "max_age": 86400
+    },
+    r"/status": {
+        "origins": ["*"],
+        "methods": ["GET", "OPTIONS"]
+    },
+    r"/incrementar": {
+        "origins": ["*"],
+        "methods": ["POST", "OPTIONS"]
+    }
+})
+
+# Adicione este handler para OPTIONS
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
